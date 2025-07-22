@@ -18,13 +18,11 @@ RESULTS_CSV_PATH = "follow_results.csv"
 def setup_driver():
     """Configures the Chrome driver for a headless environment like GitHub Actions."""
     chrome_options = Options()
-    # These options are required to run in GitHub Actions
     chrome_options.add_argument("--headless")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--window-size=1920,1080")
     
-    # Let Selenium manage the driver automatically
     service = Service()
     driver = webdriver.Chrome(service=service, options=chrome_options)
     return driver
@@ -33,27 +31,29 @@ def login_with_cookies(driver):
     """Loads session cookies from an environment variable to log in."""
     print("Attempting to log in with session cookies...")
     
-    # Get cookies from the GitHub Secret passed as an environment variable
     cookies_json = os.getenv("ZOMATO_COOKIES")
     if not cookies_json:
         print("❌ ZOMATO_COOKIES secret not found in environment. Cannot log in.")
         return False
 
-    # Navigate to a base domain first before adding cookies
     driver.get("https://www.zomato.com/india")
     time.sleep(2)
 
     try:
         cookies = json.loads(cookies_json)
         for cookie in cookies:
-            # FIX: Checks and corrects the 'sameSite' attribute if it's invalid
+            # Fix for the 'sameSite' attribute issue
             if 'sameSite' in cookie and cookie['sameSite'] not in ["Strict", "Lax", "None"]:
-                cookie['sameSite'] = "Lax" # Set a valid default
+                cookie['sameSite'] = "Lax"
+
+            # 🔧 LATEST FIX: Remove the 'domain' key to prevent InvalidCookieDomainException
+            if 'domain' in cookie:
+                cookie.pop('domain')
             
             driver.add_cookie(cookie)
             
-    except json.JSONDecodeError:
-        print("❌ Failed to decode cookies. Make sure the secret is a valid JSON string.")
+    except Exception as e:
+        print(f"❌ An error occurred while adding cookies: {e}")
         return False
 
     print("✅ Cookies loaded successfully. Refreshing page to apply session.")
@@ -66,17 +66,15 @@ def follow_user(driver, wait, profile_url):
     try:
         print(f"Visiting {profile_url}")
         driver.get(profile_url)
-        time.sleep(random.uniform(3, 5))  # Allow page to render
+        time.sleep(random.uniform(3, 5))
 
-        # Check if already following to prevent errors
         try:
             driver.find_element(By.XPATH, '//span[text()="Following"]')
             print(f"☑️ Already following: {profile_url}")
             return "Already Followed"
         except NoSuchElementException:
-            pass # Not following, so proceed
+            pass
 
-        # Find and click the 'Follow' button
         follow_button = wait.until(
             EC.element_to_be_clickable((By.XPATH, '//span[text()="Follow"]/ancestor::button'))
         )
