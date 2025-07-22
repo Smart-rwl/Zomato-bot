@@ -12,14 +12,13 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
 
 # --- CONFIGURATION ---
-# The CSV path is now relative to the script's location
 CSV_PATH = "zomato_profiles.csv"
 RESULTS_CSV_PATH = "follow_results.csv"
 
 def setup_driver():
-    """Configures the Chrome driver for GitHub Actions."""
+    """Configures the Chrome driver for a headless environment like GitHub Actions."""
     chrome_options = Options()
-    # IMPORTANT: These options are required to run in a headless environment like GitHub Actions
+    # These options are required to run in GitHub Actions
     chrome_options.add_argument("--headless")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
@@ -34,47 +33,50 @@ def login_with_cookies(driver):
     """Loads session cookies from an environment variable to log in."""
     print("Attempting to log in with session cookies...")
     
-    # Get cookies from the environment variable set by GitHub Secrets
+    # Get cookies from the GitHub Secret passed as an environment variable
     cookies_json = os.getenv("ZOMATO_COOKIES")
     if not cookies_json:
         print("❌ ZOMATO_COOKIES secret not found in environment. Cannot log in.")
         return False
 
-    # Zomato requires you to be on the domain before adding cookies.
-    # We go to a non-sensitive page first.
+    # Navigate to a base domain first before adding cookies
     driver.get("https://www.zomato.com/india")
-    time.sleep(2) # Allow page to settle
+    time.sleep(2)
 
     try:
         cookies = json.loads(cookies_json)
         for cookie in cookies:
+            # FIX: Checks and corrects the 'sameSite' attribute if it's invalid
+            if 'sameSite' in cookie and cookie['sameSite'] not in ["Strict", "Lax", "None"]:
+                cookie['sameSite'] = "Lax" # Set a valid default
+            
             driver.add_cookie(cookie)
+            
     except json.JSONDecodeError:
         print("❌ Failed to decode cookies. Make sure the secret is a valid JSON string.")
         return False
 
     print("✅ Cookies loaded successfully. Refreshing page to apply session.")
     driver.refresh()
-    time.sleep(random.uniform(3, 5)) # Wait for refresh to take effect
+    time.sleep(random.uniform(3, 5))
     return True
 
 def follow_user(driver, wait, profile_url):
-    """Navigates to a user's profile and clicks the follow button."""
+    """Navigates to a user's profile and clicks the follow button if not already following."""
     try:
         print(f"Visiting {profile_url}")
         driver.get(profile_url)
-        time.sleep(random.uniform(3, 5))  # Let page render JS
+        time.sleep(random.uniform(3, 5))  # Allow page to render
 
-        # 1. Check if already following
+        # Check if already following to prevent errors
         try:
             driver.find_element(By.XPATH, '//span[text()="Following"]')
             print(f"☑️ Already following: {profile_url}")
             return "Already Followed"
         except NoSuchElementException:
-            # Not following yet, proceed to find the 'Follow' button
-            pass
+            pass # Not following, so proceed
 
-        # 2. Find and click the 'Follow' button
+        # Find and click the 'Follow' button
         follow_button = wait.until(
             EC.element_to_be_clickable((By.XPATH, '//span[text()="Follow"]/ancestor::button'))
         )
@@ -84,7 +86,7 @@ def follow_user(driver, wait, profile_url):
         return "Success"
 
     except TimeoutException:
-        print(f"❌ Follow button not found on {profile_url}. The user may be private or page didn't load correctly.")
+        print(f"❌ Follow button not found on {profile_url}.")
         return "Failure: Button Not Found"
     except Exception as e:
         print(f"⚠️ An unexpected error occurred on {profile_url}: {e}")
@@ -93,7 +95,7 @@ def follow_user(driver, wait, profile_url):
 def main():
     """Main function to orchestrate the bot."""
     driver = setup_driver()
-    wait = WebDriverWait(driver, 15) # Increased wait time for robustness
+    wait = WebDriverWait(driver, 15)
 
     if not login_with_cookies(driver):
         driver.quit()
@@ -102,7 +104,7 @@ def main():
     try:
         df = pd.read_csv(CSV_PATH)
     except FileNotFoundError:
-        print(f"❌ Error: The file '{CSV_PATH}' was not found. Make sure it exists.")
+        print(f"❌ Error: The file '{CSV_PATH}' was not found.")
         driver.quit()
         return
 
@@ -116,7 +118,6 @@ def main():
             print(f"Skipping invalid URL at row {index}: {profile_url}")
             results.append({"profile_url": profile_url, "status": "Invalid URL"})
 
-    # Save results to a new CSV
     pd.DataFrame(results).to_csv(RESULTS_CSV_PATH, index=False)
     print(f"🎯 All done. Results saved to {RESULTS_CSV_PATH}.")
     driver.quit()
