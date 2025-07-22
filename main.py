@@ -41,22 +41,30 @@ def login_with_cookies(driver):
 
     try:
         cookies = json.loads(cookies_json)
+        added_cookies_count = 0
         for cookie in cookies:
+            # 💡 FINAL FIX: Filter cookies to only use ones for the Zomato domain.
+            # This prevents errors from unrelated cookies (e.g., google-analytics).
+            if "zomato" not in cookie.get("domain", ""):
+                continue  # Skip this cookie and move to the next one
+
             # Fix for the 'sameSite' attribute issue
             if 'sameSite' in cookie and cookie['sameSite'] not in ["Strict", "Lax", "None"]:
                 cookie['sameSite'] = "Lax"
-
-            # 🔧 LATEST FIX: Remove the 'domain' key to prevent InvalidCookieDomainException
-            if 'domain' in cookie:
-                cookie.pop('domain')
             
             driver.add_cookie(cookie)
+            added_cookies_count += 1
+        
+        print(f"✅ Added {added_cookies_count} Zomato-specific cookies.")
+        if added_cookies_count == 0:
+            print("⚠️ CRITICAL: No Zomato cookies were found or added. Login will fail.")
+            return False
             
     except Exception as e:
         print(f"❌ An error occurred while adding cookies: {e}")
         return False
 
-    print("✅ Cookies loaded successfully. Refreshing page to apply session.")
+    print("Refreshing page to apply session...")
     driver.refresh()
     time.sleep(random.uniform(3, 5))
     return True
