@@ -28,12 +28,12 @@ def setup_driver():
     return driver
 
 def login_with_cookies(driver):
-    """Loads session cookies from an environment variable to log in."""
+    """Loads and formats session cookies to log in."""
     print("Attempting to log in with session cookies...")
     
     cookies_json = os.getenv("ZOMATO_COOKIES")
     if not cookies_json:
-        print("❌ ZOMATO_COOKIES secret not found in environment. Cannot log in.")
+        print("❌ ZOMATO_COOKIES secret not found. Cannot log in.")
         return False
 
     driver.get("https://www.zomato.com/india")
@@ -43,21 +43,37 @@ def login_with_cookies(driver):
         cookies = json.loads(cookies_json)
         added_cookies_count = 0
         for cookie in cookies:
-            # 💡 FINAL FIX: Filter cookies to only use ones for the Zomato domain.
-            # This prevents errors from unrelated cookies (e.g., google-analytics).
+            # Skip non-Zomato cookies
             if "zomato" not in cookie.get("domain", ""):
-                continue  # Skip this cookie and move to the next one
+                continue
 
-            # Fix for the 'sameSite' attribute issue
-            if 'sameSite' in cookie and cookie['sameSite'] not in ["Strict", "Lax", "None"]:
-                cookie['sameSite'] = "Lax"
+            # 💡 FINAL FIX: Manually format the cookie for Selenium
+            formatted_cookie = {
+                'name': cookie['name'],
+                'value': cookie['value'],
+                'domain': cookie['domain']
+            }
+            if 'path' in cookie:
+                formatted_cookie['path'] = cookie['path']
+            if 'secure' in cookie:
+                formatted_cookie['secure'] = cookie['secure']
+            if 'httpOnly' in cookie:
+                formatted_cookie['httpOnly'] = cookie['httpOnly']
             
-            driver.add_cookie(cookie)
+            # Correctly handle expirationDate -> expiry
+            if 'expirationDate' in cookie:
+                formatted_cookie['expiry'] = int(cookie['expirationDate'])
+            
+            # Correctly handle sameSite attribute
+            if 'sameSite' in cookie and cookie['sameSite'] in ["Strict", "Lax", "None"]:
+                 formatted_cookie['sameSite'] = cookie['sameSite']
+
+            driver.add_cookie(formatted_cookie)
             added_cookies_count += 1
         
         print(f"✅ Added {added_cookies_count} Zomato-specific cookies.")
         if added_cookies_count == 0:
-            print("⚠️ CRITICAL: No Zomato cookies were found or added. Login will fail.")
+            print("⚠️ CRITICAL: No Zomato cookies were found or added.")
             return False
             
     except Exception as e:
