@@ -28,7 +28,7 @@ def setup_driver():
     return driver
 
 def login_with_cookies(driver):
-    """Loads, formats, and adds session cookies with detailed error logging."""
+    """Loads, formats, and adds session cookies, letting the browser set the domain."""
     print("Attempting to log in with session cookies...")
     
     cookies_json = os.getenv("ZOMATO_COOKIES")
@@ -36,22 +36,24 @@ def login_with_cookies(driver):
         print("❌ ZOMATO_COOKIES secret not found.")
         return False
 
-    # Navigate to the base domain first. This is crucial for setting cookies.
-    driver.get("https://www.zomato.com")
+    # Navigate to the target domain. This is essential for the browser
+    # to know which domain the cookies should be set for.
+    driver.get("https://www.zomato.com/india")
     time.sleep(2)
 
     cookies = json.loads(cookies_json)
     added_cookies_count = 0
-    for i, cookie in enumerate(cookies):
-        # Skip any cookies that aren't for Zomato.
+    for cookie in cookies:
+        # Skip any cookies that aren't for Zomato, just in case.
         if "zomato" not in cookie.get("domain", ""):
             continue
 
-        # Format the cookie into the structure Selenium expects.
+        # 💡 FINAL FIX: Build the cookie dictionary *without* the 'domain' key.
+        # This allows the browser to use the current page's domain by default,
+        # which avoids the "invalid cookie domain" security error.
         formatted_cookie = {
             'name': cookie['name'],
-            'value': cookie['value'],
-            'domain': cookie['domain']
+            'value': cookie['value']
         }
         if 'path' in cookie:
             formatted_cookie['path'] = cookie['path']
@@ -64,34 +66,32 @@ def login_with_cookies(driver):
         if 'sameSite' in cookie and cookie['sameSite'] in ["Strict", "Lax", "None"]:
              formatted_cookie['sameSite'] = cookie['sameSite']
 
-        # 💡 FINAL DEBUG: Add each cookie individually and log any errors.
         try:
             driver.add_cookie(formatted_cookie)
             added_cookies_count += 1
         except Exception as e:
-            print(f"--- ⚠️  Could not add cookie #{i} ---")
+            # This block will now likely not be triggered, but is kept for safety.
+            print(f"--- ⚠️  Could not add cookie: {cookie.get('name')} ---")
             print(f"ERROR: {e}")
-            print(f"COOKIE DATA: {formatted_cookie}")
-            print("------------------------------------")
-            # We continue to the next cookie instead of crashing.
             continue
             
-    print(f"✅ Attempted to add {added_cookies_count} Zomato-specific cookies.")
+    print(f"✅ Successfully added {added_cookies_count} Zomato-specific cookies.")
     if added_cookies_count == 0:
-        print("⚠️ CRITICAL: No Zomato cookies were successfully added.")
+        print("⚠️ CRITICAL: No Zomato cookies were added.")
         return False
 
     print("Refreshing page to apply session...")
-    driver.get("https://www.zomato.com/india")
+    driver.refresh()
     time.sleep(random.uniform(3, 5))
     
-    # Final check to see if login was successful by looking for a profile element
+    # Final check to see if login was successful.
     try:
+        # Look for a user-specific element, like a link to their profile.
         driver.find_element(By.CSS_SELECTOR, 'a[href*="/users/"]')
-        print("✅ Login appears to be successful.")
+        print("✅ Login successful!")
         return True
     except NoSuchElementException:
-        print("❌ Login failed. Could not find a profile element after loading cookies.")
+        print("❌ Login failed. Profile element not found after loading cookies.")
         return False
 
 
