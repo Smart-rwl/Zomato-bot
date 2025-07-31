@@ -1,0 +1,32 @@
+name: Run Zomato Follow Bot
+
+on:
+  workflow_dispatch: # Allows you to run this workflow manually
+
+jobs:
+  follow-on-zomato:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run the Zomato Bot
+        env:
+          ZOMATO_COOKIES: ${{ secrets.ZOMATO_COOKIES }}
+        run: python zomato_bot.py # Make sure this matches your script's filename
+
+      - name: Upload results artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: follow-results
+          path: follow_results.csv # The name of the output file from your script
