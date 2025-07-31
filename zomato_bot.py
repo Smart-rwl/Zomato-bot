@@ -3,10 +3,9 @@ import time
 import random
 import json
 import os
-from selenium import webdriver
+# Import the undetected_chromedriver library
+import undetected_chromedriver as uc
 from selenium.webdriver.common.by import By
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
@@ -16,19 +15,26 @@ CSV_PATH = "zomato_profiles.csv"
 RESULTS_CSV_PATH = "follow_results.csv"
 
 def setup_driver():
-    """Configures the Chrome driver for a headless environment."""
-    chrome_options = Options()
-    chrome_options.add_argument("--headless")
-    chrome_options.add_argument("--no-sandbox")
-    chrome_options.add_argument("--disable-dev-shm-usage")
-    chrome_options.add_argument("--window-size=1920,1080")
+    """
+    Configures and initializes an undetected Chrome WebDriver to avoid bot detection.
+    """
+    print("Setting up undetected-chromedriver...")
+    options = uc.ChromeOptions()
+    # Setting headless mode for undetected-chromedriver is done this way
+    options.add_argument('--headless=new')
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--window-size=1920,1080")
     
-    service = Service()
-    driver = webdriver.Chrome(service=service, options=chrome_options)
+    # Initialize the undetected driver
+    driver = uc.Chrome(options=options)
     return driver
 
 def login_with_cookies(driver):
-    """Loads, formats, and adds session cookies, letting the browser set the domain."""
+    """
+    Loads session cookies to authenticate the session. This function remains
+    largely the same, but will now work with the undetected driver.
+    """
     print("Attempting to log in with session cookies...")
     
     cookies_json = os.getenv("ZOMATO_COOKIES")
@@ -36,21 +42,17 @@ def login_with_cookies(driver):
         print("❌ ZOMATO_COOKIES secret not found.")
         return False
 
-    # Navigate to the target domain. This is essential for the browser
-    # to know which domain the cookies should be set for.
+    # Navigate to the target domain. This is crucial for setting cookies.
     driver.get("https://www.zomato.com/india")
-    time.sleep(2)
+    time.sleep(3) # Give the page a moment to load with the new driver
 
     cookies = json.loads(cookies_json)
     added_cookies_count = 0
     for cookie in cookies:
-        # Skip any cookies that aren't for Zomato, just in case.
         if "zomato" not in cookie.get("domain", ""):
             continue
-
-        # 💡 FINAL FIX: Build the cookie dictionary *without* the 'domain' key.
-        # This allows the browser to use the current page's domain by default,
-        # which avoids the "invalid cookie domain" security error.
+        
+        # We use the simplified format, letting the browser handle the domain
         formatted_cookie = {
             'name': cookie['name'],
             'value': cookie['value']
@@ -70,23 +72,20 @@ def login_with_cookies(driver):
             driver.add_cookie(formatted_cookie)
             added_cookies_count += 1
         except Exception as e:
-            # This block will now likely not be triggered, but is kept for safety.
             print(f"--- ⚠️  Could not add cookie: {cookie.get('name')} ---")
             print(f"ERROR: {e}")
             continue
             
-    print(f"✅ Successfully added {added_cookies_count} Zomato-specific cookies.")
+    print(f"✅ Attempted to add {added_cookies_count} cookies.")
     if added_cookies_count == 0:
         print("⚠️ CRITICAL: No Zomato cookies were added.")
         return False
 
     print("Refreshing page to apply session...")
     driver.refresh()
-    time.sleep(random.uniform(3, 5))
+    time.sleep(random.uniform(4, 6))
     
-    # Final check to see if login was successful.
     try:
-        # Look for a user-specific element, like a link to their profile.
         driver.find_element(By.CSS_SELECTOR, 'a[href*="/users/"]')
         print("✅ Login successful!")
         return True
