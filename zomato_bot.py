@@ -16,7 +16,7 @@ CSV_PATH = "zomato_profiles.csv"
 RESULTS_CSV_PATH = "follow_results.csv"
 
 def setup_driver():
-    """Configures the Chrome driver for a headless environment like GitHub Actions."""
+    """Configures the Chrome driver for a headless environment."""
     chrome_options = Options()
     chrome_options.add_argument("--headless")
     chrome_options.add_argument("--no-sandbox")
@@ -28,62 +28,72 @@ def setup_driver():
     return driver
 
 def login_with_cookies(driver):
-    """Loads and formats session cookies to log in."""
+    """Loads, formats, and adds session cookies with detailed error logging."""
     print("Attempting to log in with session cookies...")
     
     cookies_json = os.getenv("ZOMATO_COOKIES")
     if not cookies_json:
-        print("❌ ZOMATO_COOKIES secret not found. Cannot log in.")
+        print("❌ ZOMATO_COOKIES secret not found.")
         return False
 
-    driver.get("https://www.zomato.com/india")
+    # Navigate to the base domain first. This is crucial for setting cookies.
+    driver.get("https://www.zomato.com")
     time.sleep(2)
 
-    try:
-        cookies = json.loads(cookies_json)
-        added_cookies_count = 0
-        for cookie in cookies:
-            # Skip non-Zomato cookies
-            if "zomato" not in cookie.get("domain", ""):
-                continue
+    cookies = json.loads(cookies_json)
+    added_cookies_count = 0
+    for i, cookie in enumerate(cookies):
+        # Skip any cookies that aren't for Zomato.
+        if "zomato" not in cookie.get("domain", ""):
+            continue
 
-            # 💡 FINAL FIX: Manually format the cookie for Selenium
-            formatted_cookie = {
-                'name': cookie['name'],
-                'value': cookie['value'],
-                'domain': cookie['domain']
-            }
-            if 'path' in cookie:
-                formatted_cookie['path'] = cookie['path']
-            if 'secure' in cookie:
-                formatted_cookie['secure'] = cookie['secure']
-            if 'httpOnly' in cookie:
-                formatted_cookie['httpOnly'] = cookie['httpOnly']
-            
-            # Correctly handle expirationDate -> expiry
-            if 'expirationDate' in cookie:
-                formatted_cookie['expiry'] = int(cookie['expirationDate'])
-            
-            # Correctly handle sameSite attribute
-            if 'sameSite' in cookie and cookie['sameSite'] in ["Strict", "Lax", "None"]:
-                 formatted_cookie['sameSite'] = cookie['sameSite']
+        # Format the cookie into the structure Selenium expects.
+        formatted_cookie = {
+            'name': cookie['name'],
+            'value': cookie['value'],
+            'domain': cookie['domain']
+        }
+        if 'path' in cookie:
+            formatted_cookie['path'] = cookie['path']
+        if 'secure' in cookie:
+            formatted_cookie['secure'] = cookie['secure']
+        if 'httpOnly' in cookie:
+            formatted_cookie['httpOnly'] = cookie['httpOnly']
+        if 'expirationDate' in cookie:
+            formatted_cookie['expiry'] = int(cookie['expirationDate'])
+        if 'sameSite' in cookie and cookie['sameSite'] in ["Strict", "Lax", "None"]:
+             formatted_cookie['sameSite'] = cookie['sameSite']
 
+        # 💡 FINAL DEBUG: Add each cookie individually and log any errors.
+        try:
             driver.add_cookie(formatted_cookie)
             added_cookies_count += 1
-        
-        print(f"✅ Added {added_cookies_count} Zomato-specific cookies.")
-        if added_cookies_count == 0:
-            print("⚠️ CRITICAL: No Zomato cookies were found or added.")
-            return False
+        except Exception as e:
+            print(f"--- ⚠️  Could not add cookie #{i} ---")
+            print(f"ERROR: {e}")
+            print(f"COOKIE DATA: {formatted_cookie}")
+            print("------------------------------------")
+            # We continue to the next cookie instead of crashing.
+            continue
             
-    except Exception as e:
-        print(f"❌ An error occurred while adding cookies: {e}")
+    print(f"✅ Attempted to add {added_cookies_count} Zomato-specific cookies.")
+    if added_cookies_count == 0:
+        print("⚠️ CRITICAL: No Zomato cookies were successfully added.")
         return False
 
     print("Refreshing page to apply session...")
-    driver.refresh()
+    driver.get("https://www.zomato.com/india")
     time.sleep(random.uniform(3, 5))
-    return True
+    
+    # Final check to see if login was successful by looking for a profile element
+    try:
+        driver.find_element(By.CSS_SELECTOR, 'a[href*="/users/"]')
+        print("✅ Login appears to be successful.")
+        return True
+    except NoSuchElementException:
+        print("❌ Login failed. Could not find a profile element after loading cookies.")
+        return False
+
 
 def follow_user(driver, wait, profile_url):
     """Navigates to a user's profile and clicks the follow button if not already following."""
@@ -120,6 +130,7 @@ def main():
     wait = WebDriverWait(driver, 15)
 
     if not login_with_cookies(driver):
+        print("Login process failed. Exiting.")
         driver.quit()
         return
 
