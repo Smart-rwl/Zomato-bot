@@ -1,0 +1,18 @@
+# Python cache
+__pycache__/
+*.pyc
+
+# Virtual Environments
+.env
+.venv
+env/
+venv/
+
+# IDE and OS files
+.vscode/
+.idea/
+.DS_Store
+
+# Output files - IMPORTANT
+*.csv
+*.log
