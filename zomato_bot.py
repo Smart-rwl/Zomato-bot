@@ -35,8 +35,7 @@ def setup_driver():
         options.add_argument("--disable-dev-shm-usage")
         options.add_argument("--window-size=1920,1080")
         
-        # --- FIX APPLIED ---
-        # Forcing the driver to match the browser version (140) from the error log.
+        # Forcing the driver to match the browser version from the error log.
         driver = uc.Chrome(options=options, version_main=140) 
         
         logging.info("✅ WebDriver setup complete.")
@@ -60,6 +59,11 @@ def login_with_cookies(driver):
     try:
         cookies = json.loads(cookies_json)
         for cookie in cookies:
+            # FIX APPLIED: Only process cookies that belong to the 'zomato' domain
+            if 'domain' in cookie and 'zomato' not in cookie['domain']:
+                logging.info(f"Skipping cookie '{cookie.get('name')}' for non-Zomato domain: {cookie['domain']}")
+                continue
+
             if 'expirationDate' in cookie:
                 cookie['expiry'] = int(cookie['expirationDate'])
                 del cookie['expirationDate']
