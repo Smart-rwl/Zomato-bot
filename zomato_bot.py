@@ -35,9 +35,9 @@ def setup_driver():
         options.add_argument("--disable-dev-shm-usage")
         options.add_argument("--window-size=1920,1080")
         
-        # NOTE: If you get a version mismatch error, specify your Chrome version
-        # driver = uc.Chrome(options=options, version_main=140) 
-        driver = uc.Chrome(options=options)
+        # --- FIX APPLIED ---
+        # Forcing the driver to match the browser version (140) from the error log.
+        driver = uc.Chrome(options=options, version_main=140) 
         
         logging.info("✅ WebDriver setup complete.")
         return driver
